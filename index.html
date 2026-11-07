@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#eff6ff" />
+<meta name="description" content="点卡牌拼 SQL：从 SELECT 到 JOIN 的 10 关闯关小游戏" />
+<title>SQL 卡牌拼装 · 点卡牌学 SQL</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="SQL 卡牌拼装" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 8% -10%, #dbeafe 0%, transparent 62%),
+      radial-gradient(900px 520px at 105% 0%, #e0f2fe 0%, transparent 58%),
+      linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ---------- 顶部信息 chip ---------- */
+  .chip {
+    display: inline-flex; align-items: center; gap: .25rem;
+    padding: .35rem .62rem; border-radius: .8rem;
+    background: #fff; font-size: 12px; font-weight: 600; color: #64748b;
+    box-shadow: 0 1px 2px rgba(15,23,42,.08), inset 0 0 0 1px #e2e8f0;
+    white-space: nowrap;
+  }
+  .chip b { color: #0f172a; font-weight: 900; }
+  .chip-btn { cursor: pointer; transition: background .15s, transform .12s, opacity .15s; }
+  .chip-btn:hover { background: #f8fafc; }
+  .chip-btn:active { transform: scale(.95); }
+  .chip-btn.muted { opacity: .45; }
+
+  /* ---------- 乐高积木卡牌 ---------- */
+  .lego {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; padding: .55rem .95rem; margin-top: 9px;
+    border-radius: 12px; border: 0;
+    font-size: 15px; font-weight: 800; line-height: 1; letter-spacing: .01em;
+    color: #fff; cursor: pointer;
+    background: linear-gradient(180deg, var(--c1), var(--c2));
+    box-shadow: 0 6px 0 var(--c3), 0 10px 16px -10px rgba(15,23,42,.55), inset 0 1px 0 rgba(255,255,255,.35);
+    transform: rotate(var(--rot, 0deg));
+    transition: transform .15s cubic-bezier(.2,.8,.2,1), box-shadow .15s;
+    user-select: none; white-space: nowrap; max-width: 100%;
+  }
+  .lego::before, .lego::after {
+    content: ""; position: absolute; top: -6px; height: 8px; width: 13px;
+    border-radius: 5px 5px 0 0; background: var(--c1);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
+    pointer-events: none;
+  }
+  .lego::before { left: 22%; }
+  .lego::after { right: 22%; }
+  .lego-kw  { --c1:#3b82f6; --c2:#2563eb; --c3:#1e3a8a; }
+  .lego-col { --c1:#0d9488; --c2:#0f766e; --c3:#134e4a; }
+  .lego-lit { --c1:#fbbf24; --c2:#f59e0b; --c3:#b45309; color:#601f04; }
+  .lego-op  { --c1:#94a3b8; --c2:#64748b; --c3:#334155; }
+  .lego-sm  { min-height: 36px; padding: .38rem .7rem; font-size: 13px; margin-top: 5px; }
+  .lego-sm::before, .lego-sm::after { width: 10px; height: 6px; top: -5px; }
+
+  @media (hover: hover) {
+    .lego:hover { transform: translateY(-4px) rotate(0deg); box-shadow: 0 10px 0 var(--c3), 0 18px 22px -12px rgba(15,23,42,.55), inset 0 1px 0 rgba(255,255,255,.4); }
+  }
+  .lego:active { transform: translateY(4px) scale(.97) rotate(0deg); box-shadow: 0 2px 0 var(--c3); }
+
+  .lego.hint {
+    animation: hintGlow .95s ease-in-out infinite;
+    outline: 3px solid #fbbf24; outline-offset: 2px;
+    z-index: 10;
+  }
+  @keyframes hintGlow {
+    0%, 100% { box-shadow: 0 6px 0 var(--c3), 0 0 0 0 rgba(251,191,36,.95); }
+    50%      { box-shadow: 0 6px 0 var(--c3), 0 0 0 9px rgba(251,191,36,0); }
+  }
+
+  .pop { animation: popIn .28s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes popIn {
+    0% { transform: scale(.82); }
+    60% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  /* ---------- 按钮 ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+    padding: .72rem 1rem; border-radius: 1rem; border: 0;
+    font-size: 14px; font-weight: 800; color: #334155; background: #fff; cursor: pointer;
+    box-shadow: 0 3px 0 #e2e8f0;
+    transition: transform .12s, box-shadow .12s, background .15s, opacity .15s;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: none; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary {
+    background: linear-gradient(180deg, #38bdf8, #2563eb); color: #fff;
+    box-shadow: 0 5px 0 #1e40af, 0 12px 20px -12px rgba(37,99,235,.9);
+  }
+  .btn-primary:active { transform: translateY(4px); box-shadow: 0 1px 0 #1e40af; }
+  .btn-help { background: #fffbeb; color: #b45309; box-shadow: 0 3px 0 #fde68a; }
+  .btn-help:active { box-shadow: none; }
+
+  /* ---------- Toast ---------- */
+  #toastBox {
+    position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 12px);
+    z-index: 120; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 0 12px; pointer-events: none;
+  }
+  .toast {
+    max-width: min(92vw, 26rem);
+    background: #fff; color: #0f172a;
+    border-left: 4px solid #22c55e;
+    padding: .6rem .85rem; border-radius: .85rem;
+    font-size: 13px; font-weight: 600; line-height: 1.5;
+    box-shadow: 0 12px 28px -10px rgba(15,23,42,.4);
+  }
+  .toast-bad { border-left-color: #f43f5e; }
+
+  /* ---------- 通关浮层 ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 150; display: none;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(15,23,42,.42); backdrop-filter: blur(5px);
+  }
+  .overlay.show { display: flex; }
+</style>
+</head>
+<body class="text-slate-800 antialiased">
+
+<div class="mx-auto w-full max-w-3xl px-3 sm:px-5 pb-10">
+
+  <!-- ===== 顶部：标题 / 关卡 / XP ===== -->
+  <header class="pt-4 sm:pt-6 flex items-start justify-between gap-2 flex-wrap">
+    <div class="min-w-0">
+      <h1 class="text-xl sm:text-2xl font-black tracking-tight">🧱 SQL 卡牌拼装</h1>
+      <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5">点卡牌 → 拼出正确 SQL → 炸飞怪物</p>
+    </div>
+    <div class="flex items-center gap-1.5">
+      <span class="chip">关卡 <b id="levelNum">1</b>/<b id="levelTotal">10</b></span>
+      <span class="chip">⭐ <b id="xpNum">0</b> XP</span>
+      <button id="soundBtn" class="chip chip-btn" type="button" title="开关音效" aria-pressed="true">🔊</button>
+      <button id="resetBtn" class="chip chip-btn" type="button" title="清空进度重新开始">⟲ 重开</button>
+    </div>
+  </header>
+
+  <div class="mt-3 h-1.5 rounded-full bg-white/70 overflow-hidden ring-1 ring-slate-200">
+    <div id="progBar" class="h-full w-0 bg-gradient-to-r from-sky-400 to-blue-600 transition-all duration-500"></div>
+  </div>
+
+  <!-- ===== 怪物 + 需求 ===== -->
+  <section class="mt-3 rounded-3xl bg-white/85 p-3 sm:p-4 ring-1 ring-slate-200 shadow-sm">
+    <div class="flex items-start gap-3">
+      <div id="monsterWrap" class="relative shrink-0 w-16 sm:w-20 flex items-center justify-center py-1">
+        <div id="monster" class="text-5xl sm:text-6xl leading-none select-none">🐉</div>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-[10px] font-black tracking-[.18em] text-sky-600">当前任务</p>
+        <p id="needText" class="mt-1 text-base sm:text-lg font-bold leading-snug"></p>
+        <p class="mt-1.5 text-[11px] sm:text-xs text-slate-500 leading-relaxed">
+          <span class="font-bold text-slate-600">提示</span> · <span id="hintText"></span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 拼装工作台 ===== -->
+  <section class="mt-4">
+    <div class="flex items-end justify-between px-1 mb-1.5 gap-2">
+      <h2 class="text-sm font-black text-slate-700">🛠 拼装工作台</h2>
+      <span id="benchCount" class="text-[11px] text-slate-400"></span>
+    </div>
+    <div id="bench" class="flex flex-wrap content-start items-start gap-2 min-h-[104px] sm:min-h-[120px] rounded-3xl border-2 border-dashed border-sky-300 bg-sky-50/80 p-3 pt-4"></div>
+    <div class="mt-3 grid grid-cols-2 gap-2 sm:flex sm:items-center">
+      <button id="clearBtn" class="btn" type="button">🧹 清空</button>
+      <button id="helpBtn" class="btn btn-help" type="button">💡 求助</button>
+      <button id="runBtn" class="btn btn-primary col-span-2 sm:col-auto sm:ml-auto" type="button">🚀 执行查询</button>
+    </div>
+  </section>
+
+  <!-- ===== 卡牌库 ===== -->
+  <section class="mt-5">
+    <div class="flex items-end justify-between px-1 mb-2 gap-2">
+      <h2 class="text-sm font-black text-slate-700">🧩 卡牌库</h2>
+      <span class="text-[11px] text-slate-400">每关自动洗牌 · 点一下飞到工作台</span>
+    </div>
+    <div id="library" class="flex flex-wrap justify-center gap-2.5 sm:gap-3 rounded-3xl bg-white/70 ring-1 ring-slate-200 p-4 sm:p-5"></div>
+  </section>
+
+  <p class="mt-4 text-center text-[11px] text-slate-400">
+    进度与 XP 会自动保存在本机浏览器，关掉页面再打开也不丢
+  </p>
+</div>
+
+<!-- Toast 容器 -->
+<div id="toastBox"></div>
+
+<!-- 通关浮层 -->
+<div id="victory" class="overlay">
+  <div class="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl pop">
+    <div class="text-6xl">🏆</div>
+    <h2 class="mt-2 text-2xl font-black text-slate-800">全部通关！</h2>
+    <p id="victorySub" class="mt-2 text-sm text-slate-500 leading-relaxed"></p>
+    <div class="mt-4 rounded-2xl bg-amber-50 ring-1 ring-amber-200 py-3">
+      <p class="text-[11px] font-bold text-amber-700 tracking-widest">总经验值</p>
+      <p class="text-3xl font-black text-amber-600"><span id="finalXp">0</span> XP</p>
+    </div>
+    <button id="againBtn" class="btn btn-primary mt-5 w-full justify-center py-3" type="button">🔁 再玩一次</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     关卡数据
+     need / hint：任务文案
+     target：标准答案（按 SQL 书写顺序）
+     cards：卡牌库（target + 干扰项），每关加载时会整体打乱
+  ========================================================= */
+  const LEVELS = [
+    {
+      need: '查出 users 表里的所有用户',
+      hint: 'SELECT 选列，FROM 选表；* 表示所有列',
+      target: ['SELECT', '*', 'FROM', 'users'],
+      cards: ['SELECT', '*', 'FROM', 'users', 'WHERE', 'INSERT', 'GROUP BY', 'DELETE']
+    },
+    {
+      need: '查出所有在广州的用户',
+      hint: '条件写在 WHERE 后面，挂在 FROM 之后',
+      target: ['SELECT', '*', 'FROM', 'users', 'WHERE', 'city', '=', "'广州'"],
+      cards: ['SELECT', '*', 'FROM', 'users', 'WHERE', 'city', '=', "'广州'",
+              'ORDER BY', 'AND', 'amount', 'HAVING']
+    },
+    {
+      need: '查出消费金额大于 100 的用户',
+      hint: '数字条件不用加引号，直接写 amount > 100',
+      target: ['SELECT', '*', 'FROM', 'users', 'WHERE', 'amount', '>', '100'],
+      cards: ['SELECT', '*', 'FROM', 'users', 'WHERE', 'amount', '>', '100',
+              '<', '50', 'ORDER BY', 'AND']
+    },
+    {
+      need: '把所有用户按消费金额从高到低排好',
+      hint: 'ORDER BY 指定排序列，DESC 表示从高到低',
+      target: ['SELECT', '*', 'FROM', 'users', 'ORDER BY', 'amount', 'DESC'],
+      cards: ['SELECT', '*', 'FROM', 'users', 'ORDER BY', 'amount', 'DESC',
+              'WHERE', 'GROUP BY', 'LIMIT', 'city']
+    },
+    {
+      need: '只取消费金额最高的 5 个用户',
+      hint: 'LIMIT 写在 ORDER BY 之后，用来限制返回行数',
+      target: ['SELECT', '*', 'FROM', 'users', 'ORDER BY', 'amount', 'DESC', 'LIMIT', '5'],
+      cards: ['SELECT', '*', 'FROM', 'users', 'ORDER BY', 'amount', 'DESC', 'LIMIT', '5',
+              'WHERE', 'ASC', 'GROUP BY', '10']
+    },
+    {
+      need: '统计每个城市有多少用户',
+      hint: 'GROUP BY 按城市分组，COUNT(*) 数人数，列之间用逗号隔开',
+      target: ['SELECT', 'city', ',', 'COUNT(*)', 'FROM', 'users', 'GROUP BY', 'city'],
+      cards: ['SELECT', 'city', ',', 'COUNT(*)', 'FROM', 'users', 'GROUP BY', 'city',
+              'ORDER BY', 'HAVING', 'AVG(amount)', 'name']
+    },
+    {
+      need: '按用户数从多到少，给每个城市排名',
+      hint: '分组之后也能排序：ORDER BY COUNT(*) DESC',
+      target: ['SELECT', 'city', ',', 'COUNT(*)', 'FROM', 'users', 'GROUP BY', 'city',
+               'ORDER BY', 'COUNT(*)', 'DESC'],
+      cards: ['SELECT', 'city', ',', 'COUNT(*)', 'FROM', 'users', 'GROUP BY', 'city',
+              'ORDER BY', 'COUNT(*)', 'DESC', 'HAVING', 'WHERE', 'SUM(amount)', 'LIMIT']
+    },
+    {
+      need: '只看用户数超过 2 个的城市',
+      hint: '分组后的筛选要用 HAVING，不能再用 WHERE',
+      target: ['SELECT', 'city', ',', 'COUNT(*)', 'FROM', 'users', 'GROUP BY', 'city',
+               'HAVING', 'COUNT(*)', '>', '2'],
+      cards: ['SELECT', 'city', ',', 'COUNT(*)', 'FROM', 'users', 'GROUP BY', 'city',
+              'HAVING', 'COUNT(*)', '>', '2', 'ORDER BY', 'WHERE', 'AND', 'SUM(amount)']
+    },
+    {
+      need: '把用户和订单连起来，查出下单用户的名字',
+      hint: 'JOIN 连表，ON 后面写连接条件 u.id = o.user_id',
+      target: ['SELECT', 'u.name', 'FROM', 'users', 'u', 'JOIN', 'orders', 'o', 'ON',
+               'u.id', '=', 'o.user_id'],
+      cards: ['SELECT', 'u.name', 'FROM', 'users', 'u', 'JOIN', 'orders', 'o', 'ON',
+              'u.id', '=', 'o.user_id', 'WHERE', 'GROUP BY', 'LEFT JOIN', 'o.status']
+    },
+    {
+      need: '连表之后，只看广州用户的名字',
+      hint: '先 JOIN 再 WHERE，过滤条件写在最后',
+      target: ['SELECT', 'u.name', 'FROM', 'users', 'u', 'JOIN', 'orders', 'o', 'ON',
+               'u.id', '=', 'o.user_id', 'WHERE', 'u.city', '=', "'广州'"],
+      cards: ['SELECT', 'u.name', 'FROM', 'users', 'u', 'JOIN', 'orders', 'o', 'ON',
+              'u.id', '=', 'o.user_id', 'WHERE', 'u.city', '=', "'广州'",
+              'ORDER BY', 'GROUP BY', 'AND', 'o.status']
+    }
+  ];
+
+  /* SQL 子句顺序：用于生成「谁该写在谁后面」的错题提示 */
+  const CLAUSES = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT'];
+
+  const SAVE_KEY = 'sql-brick-game-v1';
+  const XP_PER_LEVEL = 50;
+
+  /* =========================================================
+     音效：优先使用免费音效链接（Mixkit Free License），
+     加载失败 / 离线 / 被拦截时自动退回内置合成音，保证永远有声音
+  ========================================================= */
+  const SFX_SRC = {
+    click: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+    win:   'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+    error: 'https://assets.mixkit.co/active_storage/sfx/2566/2566-preview.mp3'
+  };
+
+  const $ = function (id) { return document.getElementById(id); };
+
+  const levelNumEl = $('levelNum');
+  const levelTotalEl = $('levelTotal');
+  const xpNumEl    = $('xpNum');
+  const progBar    = $('progBar');
+  const needText   = $('needText');
+  const hintText   = $('hintText');
+  const benchEl     = $('bench');
+  const libraryEl   = $('library');
+  const benchCount  = $('benchCount');
+  const monsterEl   = $('monster');
+  const monsterWrap = $('monsterWrap');
+  const runBtn      = $('runBtn');
+  const clearBtn    = $('clearBtn');
+  const helpBtn     = $('helpBtn');
+  const resetBtn    = $('resetBtn');
+  const soundBtn    = $('soundBtn');
+  const againBtn    = $('againBtn');
+  const victoryEl   = $('victory');
+  const toastBox    = $('toastBox');
+
+  const state = {
+    progress: 0,   // 已通关数量 = 当前关卡索引（0 起）
+    xp: 0,
+    muted: false,
+    cards: [],     // 本关全部卡牌 { uid, t, rot, dy }（已洗牌）
+    bench: [],     // 工作台上的 uid 顺序
+    locked: false
+  };
+
+  const sound = {
+    ctx: null,
+    noise: null,
+    remote: {}
+  };
+
+  /* ================= 音效引擎 ================= */
+  function audioCtx() {
+    if (sound.ctx) return sound.ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try {
+      sound.ctx = new AC();
+    } catch (e) {
+      sound.ctx = null;
+    }
+    return sound.ctx;
+  }
+
+  function beep(ctx, freq, start, dur, type, vol, slideTo) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    const t0 = ctx.currentTime + start;
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+    o.connect(g).connect(ctx.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.03);
+  }
+
+  function noiseBurst(ctx, start, dur, vol) {
+    if (!sound.noise) {
+      const len = Math.floor(ctx.sampleRate * 0.5);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const k = 1 - i / len;
+        data[i] = (Math.random() * 2 - 1) * k * k;
+      }
+      sound.noise = buf;
+    }
+    const src = ctx.createBufferSource();
+    const g = ctx.createGain();
+    src.buffer = sound.noise;
+    g.gain.value = vol;
+    src.connect(g).connect(ctx.destination);
+    src.start(ctx.currentTime + start);
+  }
+
+  function synth(kind) {
+    const ctx = audioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
+    if (kind === 'click') {
+      beep(ctx, 820, 0, 0.07, 'square', 0.055, 1180);
+    } else if (kind === 'error') {
+      beep(ctx, 250, 0, 0.10, 'sawtooth', 0.085, 150);
+      beep(ctx, 190, 0.09, 0.14, 'sawtooth', 0.065, 120);
+    } else {
+      // win：上行琶音 + 爆炸噪声
+      beep(ctx, 520, 0, 0.16, 'triangle', 0.10, 900);
+      beep(ctx, 780, 0.11, 0.20, 'triangle', 0.09, 1300);
+      beep(ctx, 1040, 0.24, 0.34, 'sine', 0.10, 1560);
+      noiseBurst(ctx, 0.04, 0.42, 0.16);
+    }
+  }
+
+  function primeSfx() {
+    Object.keys(SFX_SRC).forEach(function (k) {
+      try {
+        const a = new Audio();
+        a.src = SFX_SRC[k];
+        a.preload = 'auto';
+        a.volume = 0.8;
+        a.addEventListener('error', function () { sound.remote[k] = null; });
+        sound.remote[k] = a;
+      } catch (e) {
+        sound.remote[k] = null;
+      }
+    });
+  }
+
+  function playSfx(kind) {
+    if (state.muted) return;
+    const a = sound.remote[kind];
+    // 远程音效没加载好就先播合成音，避免延迟感
+    if (a && a.readyState >= 2) {
+      try {
+        a.currentTime = 0;
+        const p = a.play();
+        if (p && p.catch) {
+          p.catch(function () {
+            sound.remote[kind] = null;
+            synth(kind);
+          });
+        }
+        return;
+      } catch (e) { /* 落到合成音 */ }
+    }
+    synth(kind);
+  }
+
+  function renderSoundBtn() {
+    soundBtn.textContent = state.muted ? '🔇' : '🔊';
+    soundBtn.setAttribute('aria-pressed', state.muted ? 'false' : 'true');
+    soundBtn.classList.toggle('muted', state.muted);
+  }
+
+  /* ================= 存档 ================= */
+  function save() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        progress: state.progress,
+        xp: state.xp,
+        muted: state.muted,
+        savedAt: Date.now()
+      }));
+    } catch (e) { /* 隐私模式等场景忽略 */ }
+  }
+
+  function loadSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      if (typeof d.progress !== 'number' || typeof d.xp !== 'number') return null;
+      return d;
+    } catch (e) { return null; }
+  }
+
+  /* ================= 工具 ================= */
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function findCard(uid) {
+    for (let i = 0; i < state.cards.length; i++) {
+      if (state.cards[i].uid === uid) return state.cards[i];
+    }
+    return null;
+  }
+
+  function currentLevel() {
+    return LEVELS[Math.min(state.progress, LEVELS.length - 1)];
+  }
+
+  /* 卡牌配色：按 token 语义分类，新关卡不用再维护映射表 */
+  const KEYWORDS = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY',
+                    'LIMIT', 'JOIN', 'LEFT JOIN', 'ON', 'AND', 'OR', 'DESC', 'ASC',
+                    'IN', 'AS', 'INSERT', 'DELETE', 'UPDATE'];
+  const OPS = ['*', '=', '>', '<', ',', '(', ')', '+', '-'];
+
+  function cardType(t) {
+    const s = String(t).trim();
+    if (KEYWORDS.indexOf(s) !== -1) return 'kw';
+    if (OPS.indexOf(s) !== -1) return 'op';
+    if (/^['"]/.test(s) || /^\d/.test(s)) return 'lit';
+    return 'col';
+  }
+
+  function toast(msg, kind) {
+    const d = document.createElement('div');
+    d.className = 'toast' + (kind === 'bad' ? ' toast-bad' : '');
+    d.textContent = msg;
+    toastBox.appendChild(d);
+    while (toastBox.children.length > 3) toastBox.firstElementChild.remove();
+
+    if (d.animate) {
+      d.animate(
+        [{ transform: 'translateY(-16px) scale(.96)', opacity: 0 },
+         { transform: 'translateY(0) scale(1)', opacity: 1 }],
+        { duration: 220, easing: 'ease-out' }
+      );
+    }
+    setTimeout(function () {
+      if (d.animate) {
+        const a = d.animate(
+          [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-8px)' }],
+          { duration: 240, easing: 'ease-in' }
+        );
+        a.onfinish = function () { d.remove(); };
+      } else {
+        d.remove();
+      }
+    }, 2700);
+  }
+
+  function shake(el) {
+    if (!el.animate) return;
+    el.animate([
+      { transform: 'translateX(0)' },
+      { transform: 'translateX(-6px)' },
+      { transform: 'translateX(6px)' },
+      { transform: 'translateX(-3px)' },
+      { transform: 'translateX(0)' }
+    ], { duration: 340, easing: 'ease-in-out' });
+  }
+
+  function clearHints() {
+    const list = document.querySelectorAll('.hint');
+    for (let i = 0; i < list.length; i++) list[i].classList.remove('hint');
+  }
+
+  /* ================= 卡牌渲染 ================= */
+  function buildCard(card, small) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'lego lego-' + cardType(card.t) + (small ? ' lego-sm' : '');
+    btn.dataset.uid = card.uid;
+    btn.textContent = card.t;
+    btn.setAttribute('aria-label', card.t);
+    if (small) {
+      btn.style.setProperty('--rot', '0deg');
+    } else {
+      btn.style.setProperty('--rot', card.rot + 'deg');
+      btn.style.marginTop = (9 + card.dy) + 'px';
+    }
+    return btn;
+  }
+
+  function renderStats() {
+    levelNumEl.textContent = Math.min(state.progress + 1, LEVELS.length);
+    levelTotalEl.textContent = LEVELS.length;
+    xpNumEl.textContent = state.xp;
+    progBar.style.width = (state.progress / LEVELS.length * 100) + '%';
+  }
+
+  function renderLevelInfo() {
+    const lv = currentLevel();
+    needText.textContent = lv.need;
+    hintText.textContent = lv.hint;
+  }
+
+  function renderBench() {
+    benchEl.innerHTML = '';
+    if (state.bench.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'text-sm text-sky-700/50 font-medium px-1 py-2 leading-relaxed';
+      p.textContent = '点击下方卡牌 → 按 SQL 顺序拼装到这里';
+      benchEl.appendChild(p);
+      benchCount.textContent = '';
+    } else {
+      for (let i = 0; i < state.bench.length; i++) {
+        const c = findCard(state.bench[i]);
+        if (c) benchEl.appendChild(buildCard(c, true));
+      }
+      benchCount.textContent = state.bench.length + ' 张 · 点卡牌可撤回';
+    }
+  }
+
+  function renderLibrary() {
+    libraryEl.innerHTML = '';
+    let shown = 0;
+    for (let i = 0; i < state.cards.length; i++) {
+      const c = state.cards[i];
+      if (state.bench.indexOf(c.uid) !== -1) continue;
+      libraryEl.appendChild(buildCard(c, false));
+      shown++;
+    }
+    if (shown === 0) {
+      const p = document.createElement('p');
+      p.className = 'text-sm text-slate-400 font-medium py-2';
+      p.textContent = '卡牌都用完了，检查一下工作台吧';
+      libraryEl.appendChild(p);
+    }
+  }
+
+  function renderAll() {
+    renderStats();
+    renderLevelInfo();
+    renderBench();
+    renderLibrary();
+  }
+
+  function setLocked(v) {
+    state.locked = v;
+    runBtn.disabled = v;
+    clearBtn.disabled = v;
+    helpBtn.disabled = v;
+    libraryEl.classList.toggle('pointer-events-none', v);
+    libraryEl.classList.toggle('opacity-50', v);
+    benchEl.classList.toggle('pointer-events-none', v);
+  }
+
+  /* ================= 加载关卡（每关重新洗牌） ================= */
+  function loadLevel(index) {
+    state.progress = index;
+    const lv = LEVELS[index];
+
+    state.cards = lv.cards.map(function (t, i) {
+      return {
+        uid: 'c' + index + '-' + i + '-' + Math.random().toString(36).slice(2, 7),
+        t: t,
+        rot: (Math.random() * 3.2 - 1.6).toFixed(2),
+        dy: Math.random() * 7
+      };
+    });
+    // 关键：每关都把「正确卡 + 干扰项」整体随机打乱，避免背板
+    shuffle(state.cards);
+
+    state.bench = [];
+    setLocked(false);
+    resetMonster();
+    renderAll();
+    save();
+  }
+
+  function resetMonster() {
+    monsterEl.textContent = '🐉';
+    monsterEl.style.opacity = '';
+    monsterEl.getAnimations().forEach(function (a) { a.cancel(); });
+    if (monsterEl.animate) {
+      monsterEl.animate(
+        [{ transform: 'scale(.6) rotate(-10deg)', opacity: 0 },
+         { transform: 'scale(1) rotate(0deg)', opacity: 1 }],
+        { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1.3)' }
+      );
+    }
+  }
+
+  /* ================= 飞牌动画 ================= */
+  function flyGhost(rect, card, tgtEl) {
+    if (!rect || !tgtEl) return;
+    const tgtRect = tgtEl.getBoundingClientRect();
+    const g = buildCard(card, false);
+    g.style.position = 'fixed';
+    g.style.left = rect.left + 'px';
+    g.style.top = rect.top + 'px';
+    g.style.width = rect.width + 'px';
+    g.style.height = rect.height + 'px';
+    g.style.margin = '0';
+    g.style.zIndex = '110';
+    g.style.pointerEvents = 'none';
+    g.style.transformOrigin = 'top left';
+    g.style.opacity = '0.97';
+    document.body.appendChild(g);
+
+    tgtEl.style.opacity = '0';
+
+    const dx = tgtRect.left - rect.left;
+    const dy = tgtRect.top - rect.top;
+    const sx = rect.width ? tgtRect.width / rect.width : 1;
+    const sy = rect.height ? tgtRect.height / rect.height : 1;
+
+    const finish = function () {
+      g.remove();
+      tgtEl.style.opacity = '';
+      tgtEl.classList.add('pop');
+      setTimeout(function () { tgtEl.classList.remove('pop'); }, 300);
+    };
+
+    if (g.animate) {
+      const a = g.animate([
+        { transform: 'translate(0,0) scale(1,1) rotate(-3deg)' },
+        { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + sx + ',' + sy + ') rotate(0deg)' }
+      ], { duration: 420, easing: 'cubic-bezier(.25,1,.35,1)' });
+      a.onfinish = finish;
+    } else {
+      finish();
+    }
+  }
+
+  /* ================= 交互：加牌 / 撤牌 ================= */
+  function addCard(uid, srcEl) {
+    if (state.locked) return;
+    if (state.bench.indexOf(uid) !== -1) return;
+    const c = findCard(uid);
+    if (!c || !srcEl) return;
+
+    const rect = srcEl.getBoundingClientRect();
+    state.bench.push(uid);
+    clearHints();
+    playSfx('click');
+    renderBench();
+    renderLibrary();
+
+    const tgtEl = benchEl.querySelector('[data-uid="' + uid + '"]');
+    flyGhost(rect, c, tgtEl);
+  }
+
+  function removeCard(uid) {
+    if (state.locked) return;
+    const idx = state.bench.indexOf(uid);
+    if (idx === -1) return;
+    state.bench.splice(idx, 1);
+    clearHints();
+    playSfx('click');
+
+    const el = benchEl.querySelector('[data-uid="' + uid + '"]');
+    if (!el) {
+      renderBench();
+      renderLibrary();
+      return;
+    }
+    el.style.pointerEvents = 'none';
+    if (el.animate) {
+      el.animate(
+        [{ transform: 'scale(1) translateY(0)', opacity: 1 },
+         { transform: 'scale(.55) translateY(-10px)', opacity: 0 }],
+        { duration: 180, easing: 'ease-in', fill: 'forwards' }
+      );
+      setTimeout(function () {
+        renderBench();
+        renderLibrary();
+      }, 165);
+    } else {
+      renderBench();
+      renderLibrary();
+    }
+  }
+
+  libraryEl.addEventListener('click', function (e) {
+    if (state.locked) return;
+    const btn = e.target.closest('.lego');
+    if (!btn || !libraryEl.contains(btn)) return;
+    addCard(btn.dataset.uid, btn);
+  });
+
+  benchEl.addEventListener('click', function (e) {
+    if (state.locked) return;
+    const btn = e.target.closest('.lego');
+    if (!btn || !benchEl.contains(btn)) return;
+    removeCard(btn.dataset.uid);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    if (state.locked) return;
+    clearHints();
+    state.bench = [];
+    playSfx('click');
+    renderBench();
+    renderLibrary();
+  });
+
+  /* ================= 判定与提示 ================= */
+  function tipFor(got, target) {
+    if (!got.length) return '工作台还是空的，先从卡牌库选一张吧。';
+
+    // 1) 多余卡牌（按出现次数比对，兼容重复 token）
+    const pool = target.slice();
+    for (let i = 0; i < got.length; i++) {
+      const idx = pool.indexOf(got[i]);
+      if (idx === -1) return '「' + got[i] + '」这一关用不上，先点它撤回吧。';
+      pool.splice(idx, 1);
+    }
+
+    // 2) 子句顺序错误
+    let lastClause = '';
+    let lastIdx = -1;
+    for (let i = 0; i < got.length; i++) {
+      const ci = CLAUSES.indexOf(got[i]);
+      if (ci === -1) continue;
+      if (ci < lastIdx) {
+        return '「' + got[i] + '」应该写在「' + lastClause + '」后面。';
+      }
+      lastIdx = ci;
+      lastClause = got[i];
+    }
+
+    // 3) 数量不对
+    if (got.length < target.length) {
+      return '语句还没写完，还差 ' + (target.length - got.length) + ' 张卡。';
+    }
+    if (got.length > target.length) {
+      return '卡牌放多了，检查一下是不是多塞了一张。';
+    }
+
+    // 4) 数量对了，找第一个对不上的位置
+    for (let i = 0; i < got.length; i++) {
+      if (got[i] !== target[i]) {
+        return '第 ' + (i + 1) + ' 张卡的位置不对，想想 SQL 的书写顺序。';
+      }
+    }
+    return '再检查一遍拼装顺序吧。';
+  }
+
+  function isCorrect(got, target) {
+    if (got.length !== target.length) return false;
+    for (let i = 0; i < got.length; i++) {
+      if (got[i].toLowerCase() !== target[i].toLowerCase()) return false;
+    }
+    return true;
+  }
+
+  /* ================= 执行查询 ================= */
+  function run() {
+    if (state.locked) return;
+    if (state.bench.length === 0) {
+      playSfx('error');
+      toast('工作台还是空的，先从卡牌库选一张吧。', 'bad');
+      shake(benchEl);
+      return;
+    }
+    const lv = currentLevel();
+    const got = state.bench.map(function (uid) {
+      const c = findCard(uid);
+      return c ? c.t : '';
+    });
+
+    if (isCorrect(got, lv.target)) {
+      win();
+    } else {
+      playSfx('error');
+      toast(tipFor(got, lv.target), 'bad');
+      shake(benchEl);
+    }
+  }
+  runBtn.addEventListener('click', run);
+
+  /* ================= 胜利 ================= */
+  function explodeMonster() {
+    monsterEl.textContent = '💥';
+    monsterEl.getAnimations().forEach(function (a) { a.cancel(); });
+    if (monsterEl.animate) {
+      monsterEl.animate([
+        { transform: 'scale(1) rotate(0deg)', opacity: 1, offset: 0 },
+        { transform: 'scale(1.55) rotate(12deg)', opacity: 1, offset: .35 },
+        { transform: 'scale(.15) rotate(-16deg)', opacity: 0, offset: 1 }
+      ], { duration: 900, easing: 'cubic-bezier(.3,0,.6,1)', fill: 'forwards' });
+    }
+    burst();
+  }
+
+  function burst() {
+    const emo = ['💥', '✨', '⭐', '💫', '🔥', '🎉'];
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement('span');
+      s.textContent = emo[i % emo.length];
+      s.style.position = 'absolute';
+      s.style.left = '50%';
+      s.style.top = '50%';
+      s.style.fontSize = (13 + Math.random() * 10) + 'px';
+      s.style.pointerEvents = 'none';
+      s.style.transform = 'translate(-50%,-50%)';
+      monsterWrap.appendChild(s);
+      const ang = (Math.PI * 2 * i) / 12 + Math.random() * .4;
+      const dist = 42 + Math.random() * 46;
+      if (s.animate) {
+        const a = s.animate([
+          { transform: 'translate(-50%,-50%) scale(.3)', opacity: 1 },
+          { transform: 'translate(calc(-50% + ' + (Math.cos(ang) * dist) + 'px), calc(-50% + ' + (Math.sin(ang) * dist) + 'px)) scale(1.15)', opacity: 0 }
+        ], { duration: 820, easing: 'ease-out' });
+        a.onfinish = function () { s.remove(); };
+      } else {
+        setTimeout(function () { s.remove(); }, 820);
+      }
+    }
+  }
+
+  function floatXp() {
+    const chip = xpNumEl.parentElement;
+    const r = chip.getBoundingClientRect();
+    const s = document.createElement('span');
+    s.textContent = '+' + XP_PER_LEVEL + ' XP';
+    s.style.position = 'fixed';
+    s.style.left = (r.left + r.width / 2) + 'px';
+    s.style.top = r.top + 'px';
+    s.style.transform = 'translate(-50%,0)';
+    s.style.fontWeight = '900';
+    s.style.fontSize = '15px';
+    s.style.color = '#d97706';
+    s.style.zIndex = '130';
+    s.style.pointerEvents = 'none';
+    s.style.textShadow = '0 1px 0 #fff';
+    document.body.appendChild(s);
+    if (s.animate) {
+      const a = s.animate([
+        { transform: 'translate(-50%,0) scale(.8)', opacity: 0 },
+        { transform: 'translate(-50%,-16px) scale(1.1)', opacity: 1, offset: .35 },
+        { transform: 'translate(-50%,-48px) scale(1)', opacity: 0 }
+      ], { duration: 1200, easing: 'ease-out' });
+      a.onfinish = function () { s.remove(); };
+    } else {
+      setTimeout(function () { s.remove(); }, 1200);
+    }
+  }
+
+  function win() {
+    setLocked(true);
+    playSfx('win');
+    explodeMonster();
+    floatXp();
+
+    const already = state.progress; // 当前关索引
+    state.xp += XP_PER_LEVEL;
+    state.progress = already + 1;
+    save();
+    renderStats();
+    toast('🎉 拼装正确，怪物被炸飞了！+' + XP_PER_LEVEL + ' XP', 'ok');
+
+    setTimeout(function () {
+      if (state.progress >= LEVELS.length) {
+        showVictory(false);
+      } else {
+        loadLevel(state.progress);
+        toast('第 ' + (state.progress + 1) + ' 关来了，卡牌已重新洗牌，继续拼！', 'ok');
+      }
+    }, 1800);
+  }
+
+  /* ================= 求助 ================= */
+  function help() {
+    if (state.locked) return;
+    const lv = currentLevel();
+    const target = lv.target;
+    const got = state.bench.map(function (uid) {
+      const c = findCard(uid);
+      return c ? c.t : '';
+    });
+
+    let i = 0;
+    while (i < got.length && i < target.length && got[i] === target[i]) i++;
+
+    if (i < got.length) {
+      const uid = state.bench[i];
+      const el = benchEl.querySelector('[data-uid="' + uid + '"]');
+      if (el) {
+        clearHints();
+        el.classList.add('hint');
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        setTimeout(function () { el.classList.remove('hint'); }, 4200);
+      }
+      playSfx('click');
+      toast('第 ' + (i + 1) + ' 张卡不太对，先点它撤回吧。', 'bad');
+      return;
+    }
+
+    if (i < target.length) {
+      const need = target[i];
+      const onBench = got.indexOf(need);
+      if (onBench !== -1) {
+        const uid = state.bench[onBench];
+        const el = benchEl.querySelector('[data-uid="' + uid + '"]');
+        if (el) {
+          clearHints();
+          el.classList.add('hint');
+          setTimeout(function () { el.classList.remove('hint'); }, 4200);
+        }
+        playSfx('click');
+        toast('「' + need + '」被放到了第 ' + (onBench + 1) + ' 位，位置不对，先撤回它。', 'bad');
+        return;
+      }
+
+      const card = state.cards.filter(function (c) {
+        return c.t === need && state.bench.indexOf(c.uid) === -1;
+      })[0];
+      if (card) {
+        const el = libraryEl.querySelector('[data-uid="' + card.uid + '"]');
+        if (el) {
+          clearHints();
+          el.classList.add('hint');
+          el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          setTimeout(function () { el.classList.remove('hint'); }, 4200);
+        }
+        playSfx('click');
+        toast('下一步：点「' + need + '」这张卡。', 'ok');
+      }
+      return;
+    }
+
+    playSfx('click');
+    toast('卡牌都齐了，点「执行查询」试试！', 'ok');
+  }
+  helpBtn.addEventListener('click', help);
+
+  /* ================= 通关 / 重置 ================= */
+  function showVictory(fromSave) {
+    $('finalXp').textContent = state.xp;
+    $('victorySub').textContent = fromSave
+      ? '你已经通关过啦，随时可以再来一遍。'
+      : '十关全部拼装正确，SQL 大师就是你了！';
+    victoryEl.classList.add('show');
+  }
+
+  function resetAll(ask) {
+    if (ask && !window.confirm('确定要清空进度和 XP，重新开始吗？')) return;
+    state.progress = 0;
+    state.xp = 0;
+    state.bench = [];
+    victoryEl.classList.remove('show');
+    loadLevel(0);
+    save();
+  }
+
+  resetBtn.addEventListener('click', function () { resetAll(true); });
+  againBtn.addEventListener('click', function () { resetAll(false); });
+
+  soundBtn.addEventListener('click', function () {
+    state.muted = !state.muted;
+    renderSoundBtn();
+    save();
+    if (!state.muted) playSfx('click');
+  });
+
+  /* ================= 启动 ================= */
+  (function boot() {
+    const saved = loadSave();
+    if (saved) {
+      state.xp = saved.xp;
+      state.muted = !!saved.muted;
+      state.progress = Math.max(0, Math.min(saved.progress, LEVELS.length));
+    }
+
+    renderSoundBtn();
+    primeSfx();
+    // 首次交互时解锁 WebAudio（移动端自动播放策略）
+    const unlock = function () {
+      audioCtx();
+      document.removeEventListener('pointerdown', unlock);
+    };
+    document.addEventListener('pointerdown', unlock);
+
+    if (state.progress >= LEVELS.length) {
+      // 上次已经全通关：显示通关浮层
+      state.cards = [];
+      state.bench = [];
+      setLocked(true);
+      renderStats();
+      renderLevelInfo();
+      renderBench();
+      renderLibrary();
+      showVictory(true);
+      return;
+    }
+
+    loadLevel(state.progress);
+  })();
+
+  /* ================= PWA ================= */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('service-worker.js').catch(function () {
+        // 非 https / 本地 file:// 打开时注册会失败，忽略即可
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
