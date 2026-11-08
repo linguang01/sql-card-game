@@ -4,7 +4,7 @@
    - Tailwind CDN / 音效等第三方资源：首次访问后写入运行时缓存，离线可用
    - 导航请求一律回退到 index.html（单页应用体验）
 */
-const CACHE_NAME = 'sql-brick-v1';
+const CACHE_NAME = 'sql-brick-v2';
 const PRECACHE = [
   './',
   './index.html',

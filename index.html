@@ -41,6 +41,20 @@
   .chip-btn:active { transform: scale(.95); }
   .chip-btn.muted { opacity: .45; }
 
+  /* ---------- 选关面板 ---------- */
+  #levelPicker { display: none; }
+  #levelPicker.open { display: block; }
+  .level-btn {
+    padding: .6rem 0; border-radius: .8rem; border: 0;
+    font-size: 14px; font-weight: 900; color: #334155; background: #fff;
+    cursor: pointer; box-shadow: 0 2px 0 #e2e8f0;
+    transition: transform .1s, box-shadow .1s, opacity .15s;
+  }
+  .level-btn:active { transform: translateY(2px); box-shadow: none; }
+  .level-btn.done { background: #dbeafe; color: #1d4ed8; }
+  .level-btn.active { background: linear-gradient(180deg, #38bdf8, #2563eb); color: #fff; box-shadow: 0 3px 0 #1e40af; }
+  .level-btn.locked { opacity: .4; cursor: not-allowed; }
+
   /* ---------- 乐高积木卡牌 ---------- */
   .lego {
     position: relative;
@@ -148,10 +162,19 @@
     <div class="flex items-center gap-1.5">
       <span class="chip">关卡 <b id="levelNum">1</b>/<b id="levelTotal">10</b></span>
       <span class="chip">⭐ <b id="xpNum">0</b> XP</span>
+      <button id="levelBtn" class="chip chip-btn" type="button" title="选择已通关的关卡">🗺 选关</button>
       <button id="soundBtn" class="chip chip-btn" type="button" title="开关音效" aria-pressed="true">🔊</button>
       <button id="resetBtn" class="chip chip-btn" type="button" title="清空进度重新开始">⟲ 重开</button>
     </div>
   </header>
+
+  <div id="levelPicker" class="mt-3 rounded-2xl bg-white/85 ring-1 ring-slate-200 p-3">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-black text-slate-500">🗺 选择关卡（只能进入已通关的）</span>
+      <button id="levelClose" class="text-xs font-black text-slate-400 hover:text-slate-600" type="button">✕ 收起</button>
+    </div>
+    <div id="levelGrid" class="grid grid-cols-5 gap-2"></div>
+  </div>
 
   <div class="mt-3 h-1.5 rounded-full bg-white/70 overflow-hidden ring-1 ring-slate-200">
     <div id="progBar" class="h-full w-0 bg-gradient-to-r from-sky-400 to-blue-600 transition-all duration-500"></div>
@@ -342,9 +365,14 @@
   const againBtn    = $('againBtn');
   const victoryEl   = $('victory');
   const toastBox    = $('toastBox');
+  const levelBtn    = $('levelBtn');
+  const levelPicker = $('levelPicker');
+  const levelGrid   = $('levelGrid');
+  const levelClose  = $('levelClose');
 
   const state = {
-    progress: 0,   // 已通关数量 = 当前关卡索引（0 起）
+    progress: 0,     // 已通关数量（解锁进度）
+    levelIndex: 0,   // 当前显示的关卡索引（可在已通关关卡间切换）
     xp: 0,
     muted: false,
     cards: [],     // 本关全部卡牌 { uid, t, rot, dy }（已洗牌）
@@ -503,7 +531,7 @@
   }
 
   function currentLevel() {
-    return LEVELS[Math.min(state.progress, LEVELS.length - 1)];
+    return LEVELS[Math.min(state.levelIndex, LEVELS.length - 1)];
   }
 
   /* 卡牌配色：按 token 语义分类，新关卡不用再维护映射表 */
@@ -581,7 +609,7 @@
   }
 
   function renderStats() {
-    levelNumEl.textContent = Math.min(state.progress + 1, LEVELS.length);
+    levelNumEl.textContent = Math.min(state.levelIndex + 1, LEVELS.length);
     levelTotalEl.textContent = LEVELS.length;
     xpNumEl.textContent = state.xp;
     progBar.style.width = (state.progress / LEVELS.length * 100) + '%';
@@ -646,7 +674,7 @@
 
   /* ================= 加载关卡（每关重新洗牌） ================= */
   function loadLevel(index) {
-    state.progress = index;
+    state.levelIndex = index;
     const lv = LEVELS[index];
 
     state.cards = lv.cards.map(function (t, i) {
@@ -665,6 +693,34 @@
     resetMonster();
     renderAll();
     save();
+  }
+
+  /* ================= 选关面板 ================= */
+  function renderLevelPicker() {
+    levelGrid.innerHTML = '';
+    for (let i = 0; i < LEVELS.length; i++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'level-btn';
+      b.textContent = i + 1;
+
+      const locked = i > state.progress;
+      const cleared = i < state.progress;
+      if (i === state.levelIndex) b.classList.add('active');
+      else if (cleared) b.classList.add('done');
+      if (locked) {
+        b.classList.add('locked');
+        b.disabled = true;
+      } else {
+        b.addEventListener('click', function () {
+          if (i === state.levelIndex) { levelPicker.classList.remove('open'); return; }
+          loadLevel(i);
+          levelPicker.classList.remove('open');
+          toast('已跳到第 ' + (i + 1) + ' 关', 'ok');
+        });
+      }
+      levelGrid.appendChild(b);
+    }
   }
 
   function resetMonster() {
@@ -941,14 +997,18 @@
     setLocked(true);
     playSfx('win');
     explodeMonster();
-    floatXp();
 
-    const already = state.progress; // 当前关索引
-    state.xp += XP_PER_LEVEL;
-    state.progress = already + 1;
+    const isNew = state.levelIndex >= state.progress; // 是否在挑战尚未通关的关卡
+    if (isNew) {
+      floatXp();
+      state.xp += XP_PER_LEVEL;
+      state.progress = state.levelIndex + 1;
+    }
     save();
     renderStats();
-    toast('🎉 拼装正确，怪物被炸飞了！+' + XP_PER_LEVEL + ' XP', 'ok');
+    toast(isNew
+      ? '🎉 拼装正确，怪物被炸飞了！+' + XP_PER_LEVEL + ' XP'
+      : '🎉 拼装正确！练习关不加 XP。', 'ok');
 
     setTimeout(function () {
       if (state.progress >= LEVELS.length) {
@@ -989,20 +1049,9 @@
 
     if (i < target.length) {
       const need = target[i];
-      const onBench = got.indexOf(need);
-      if (onBench !== -1) {
-        const uid = state.bench[onBench];
-        const el = benchEl.querySelector('[data-uid="' + uid + '"]');
-        if (el) {
-          clearHints();
-          el.classList.add('hint');
-          setTimeout(function () { el.classList.remove('hint'); }, 4200);
-        }
-        playSfx('click');
-        toast('「' + need + '」被放到了第 ' + (onBench + 1) + ' 位，位置不对，先撤回它。', 'bad');
-        return;
-      }
 
+      // 先查卡牌库（未使用）里还有没有这张卡：第二张「city」、第二个「=」都命中这里，
+      // 避免被误判成「第 X 位放错」。
       const card = state.cards.filter(function (c) {
         return c.t === need && state.bench.indexOf(c.uid) === -1;
       })[0];
@@ -1016,6 +1065,21 @@
         }
         playSfx('click');
         toast('下一步：点「' + need + '」这张卡。', 'ok');
+        return;
+      }
+
+      // 库里没有同名卡，才说明它被放到了错误位置，需要先撤回
+      const onBench = got.indexOf(need);
+      if (onBench !== -1) {
+        const uid = state.bench[onBench];
+        const el = benchEl.querySelector('[data-uid="' + uid + '"]');
+        if (el) {
+          clearHints();
+          el.classList.add('hint');
+          setTimeout(function () { el.classList.remove('hint'); }, 4200);
+        }
+        playSfx('click');
+        toast('「' + need + '」被放到了第 ' + (onBench + 1) + ' 位，位置不对，先撤回它。', 'bad');
       }
       return;
     }
@@ -1047,6 +1111,14 @@
   resetBtn.addEventListener('click', function () { resetAll(true); });
   againBtn.addEventListener('click', function () { resetAll(false); });
 
+  levelBtn.addEventListener('click', function () {
+    const open = levelPicker.classList.toggle('open');
+    if (open) renderLevelPicker();
+  });
+  levelClose.addEventListener('click', function () {
+    levelPicker.classList.remove('open');
+  });
+
   soundBtn.addEventListener('click', function () {
     state.muted = !state.muted;
     renderSoundBtn();
@@ -1061,6 +1133,7 @@
       state.xp = saved.xp;
       state.muted = !!saved.muted;
       state.progress = Math.max(0, Math.min(saved.progress, LEVELS.length));
+      state.levelIndex = Math.max(0, Math.min(state.progress, LEVELS.length - 1));
     }
 
     renderSoundBtn();
